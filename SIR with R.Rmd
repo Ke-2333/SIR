@@ -1,0 +1,94 @@
+---
+title: "SIR with R"
+author: "Kexuan Song"
+date: "2021/7/6"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd('F://!BENTLEY//RA//SIR')
+```
+
+```{r}
+matpower = function(a,alpha){
+  a = round((a + t(a))/2,7); 
+  tmp = eigen(a);
+  return(tmp$vectors%*%diag((tmp$values)^alpha)%*%t(tmp$vectors))}
+
+discretize=function(y,h){
+  n=length(y);m=floor(n/h)
+  y=y + .00001*mean(y)*rnorm(n)
+  yord = y[order(y)]
+  divpt=numeric();
+  
+  for(i in 1:(h-1)) divpt = c(divpt,yord[i*m+1]) #1,2,3,..,h-1
+  
+  y1=rep(0,n)
+  y1[y<divpt[1]]=1
+  y1[y>=divpt[h-1]]=h
+  
+  for(i in 2:(h-1)) y1[(y>=divpt[i-1])&(y<divpt[i])]=i
+  
+  return(y1)}
+
+sir=function(x,y,h,r,ytype){
+  p=ncol(x);
+  n=nrow(x)
+  signrt=matpower(var(x),-1/2)
+  xc=t(t(x)-apply(x,2,mean))
+  xst=xc%*%signrt
+  
+  if(ytype=="continuous") ydis=discretize(y,h)
+  if(ytype=="categorical") ydis=y
+  
+  yless=ydis;
+  ylabel=numeric()
+  
+  for(i in 1:n) {if(var(yless)!=0) {
+    ylabel=c(ylabel,yless[1]);
+    yless=yless[yless!=yless[1]]}}
+  
+  ylabel=c(ylabel,yless[1])
+  prob=numeric();
+  exy=numeric()
+  
+  for(i in 1:h) prob=c(prob,length(ydis[ydis==ylabel[i]])/n)
+  
+  for(i in 1:h) exy=rbind(exy,apply(xst[ydis==ylabel[i],],2,mean))
+  
+  sirmat=t(exy)%*%diag(prob)%*%exy
+  
+  return(signrt%*%eigen(sirmat)$vectors[,1:r])}
+```
+
+
+```{r}
+library(readxl)
+df = read_excel('bigmacindex.xlsx', sheet = 2, col_names = TRUE)
+x = data.matrix(df[,1:9])
+y = data.matrix(df[,10])
+plot(df[,1:10])  
+```
+
+```{r}
+h=8
+r=2
+ytype = 'continuous'
+
+beta = sir(x,y,h,r,ytype)  
+sirPre1 = x %*% beta[,1]
+sirPre2 = x %*% beta[,2]
+plot(sirPre1,y)
+plot(sirPre2,y)
+```
+```{r}
+
+cor(x,y,method = 'spearman')
+cor(sirPre1,y,method = 'spearman')
+cor(sirPre2,y,method = 'spearman')
+```
+

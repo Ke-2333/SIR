@@ -1,0 +1,318 @@
+---
+title: "SIR with R"
+author: "Kexuan Song"
+date: "2021/7/6"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd('F://!BENTLEY//RA//SIR')
+```
+
+```{r}
+matpower = function(a,alpha){
+  a = round((a + t(a))/2,7); 
+  tmp = eigen(a);
+  return(tmp$vectors%*%diag((tmp$values)^alpha)%*%t(tmp$vectors))}
+
+discretize=function(y,h){
+  n=length(y);m=floor(n/h)
+  y=y + .00001*mean(y)*rnorm(n)
+  yord = y[order(y)]
+  divpt=numeric();
+  
+  for(i in 1:(h-1)) divpt = c(divpt,yord[i*m+1]) #1,2,3,..,h-1
+  
+  y1=rep(0,n)
+  y1[y<divpt[1]]=1
+  y1[y>=divpt[h-1]]=h
+  
+  for(i in 2:(h-1)) y1[(y>=divpt[i-1])&(y<divpt[i])]=i
+  
+  return(y1)}
+
+sir=function(x,y,h,r,ytype){
+  p=ncol(x)
+  n=nrow(x)
+  signrt=matpower(var(x),-1/2)
+  xc=t(t(x)-apply(x,2,mean))
+  xst=xc%*%signrt
+  
+  if(ytype=="continuous") ydis=discretize(y,h)
+  if(ytype=="categorical") ydis=y
+  
+  yless=ydis;
+  ylabel=numeric()
+  
+  for(i in 1:n) {if(var(yless)!=0) {
+    ylabel=c(ylabel,yless[1]);
+    yless=yless[yless!=yless[1]]}}
+  
+  ylabel=c(ylabel,yless[1])
+  prob=numeric();
+  exy=numeric()
+  
+  for(i in 1:h) prob=c(prob,length(ydis[ydis==ylabel[i]])/n)
+  
+  for(i in 1:h) exy=rbind(exy,apply(xst[ydis==ylabel[i],],2,mean))
+  
+  sirmat=t(exy)%*%diag(prob)%*%exy
+  
+  return(signrt%*%eigen(sirmat)$vectors[,1:r])}
+```
+
+
+```{r}
+library(readxl)
+df = read_excel('bigmacindex.xlsx', sheet = 2, col_names = TRUE)
+x = data.matrix(df[,1:9])
+y = data.matrix(df[,10])
+plot(df[,1:10])  
+```
+
+```{r}
+h=8
+r=2
+ytype = 'continuous'
+
+beta = sir(x,y,h,r,ytype)  
+sirPre1 = x %*% beta[,1]
+sirPre2 = x %*% beta[,2]
+plot(sirPre1,y)
+plot(sirPre2,y)
+```
+```{r}
+
+cor(x,y,method = 'spearman')
+cor(sirPre1,y,method = 'spearman')
+cor(sirPre2,y,method = 'spearman')
+```
+
+PIR
+
+```{r}
+pir=function(x,y,m,r){
+
+xc=t(t(x)-apply(x,2,mean))
+signrt=matpower(var(x),-1/2)
+xstand=xc%*%signrt
+f=numeric()
+ystand=(y-mean(y))/sd(y)
+
+for(i in 1:m) f=cbind(f, ystand^i)
+
+sigxf=cov(xstand,f)
+sigff=var(f)
+cand=sigxf%*%solve(sigff)%*%t(sigxf)
+
+return(signrt%*%eigen(cand)$vectors[,1:r])}
+
+```
+
+
+```{r}
+m=3
+r=2
+
+beta = pir(x,y,m,r)  
+pirPre1 = x %*% beta[,1]
+pirPre2 = x %*% beta[,2]
+plot(pirPre1,y)
+plot(pirPre2,y)
+
+
+cor(pirPre1,y,method = 'spearman')
+cor(pirPre2,y,method = 'spearman')
+```
+
+```{r}
+kir=function(x,y,b,eps,r){
+
+gker=function(b,y){
+n=length(y)
+k1=y%*%t(y)
+k2=matrix(diag(k1),n,n)
+return((1/b)*exp(-(k2+t(k2)-2*k1)/(2*b^2)))}
+
+n=length(y)
+xc=t(t(x)-apply(x,2,mean))
+signrt=matpower(var(x),-1/2)
+xst=xc%*%signrt
+f=numeric()
+yst=(y-mean(y))/sd(y)
+kern=gker(b,yst)
+mea=mean(c(kern%*%rep(1,n)))
+den=apply(cbind(kern%*%rep(1,n),rep(eps*mea,n)),1,max)
+scale=eigen(kern)$values[1]
+exy=(kern%*%xst)*(1/den)
+mat=t(exy)%*%exy
+
+return(signrt%*%eigen(mat)$vectors[,1:r])}
+
+```
+
+```{r}
+b=0.2
+eps=1.1
+r=2
+beta = kir(x,y,b,eps,r)  
+kirPre1 = x %*% beta[,1]
+kirPre2 = x %*% beta[,2]
+plot(kirPre1,y)
+plot(kirPre2,y)
+
+
+cor(kirPre1,y,method = 'spearman')
+cor(kirPre2,y,method = 'spearman')
+```
+
+```{r}
+save=function(x,y,h,r,ytype){
+p=ncol(x)
+n=nrow(x)
+signrt=matpower(var(x),-1/2)
+xc=t(t(x)-apply(x,2,mean))
+xst=xc%*%signrt
+
+if(ytype=="continuous") ydis=discretize(y,h)
+if(ytype=="categorical") ydis=y
+
+yless=ydis
+ylabel=numeric()
+
+for(i in 1:n) {if(var(yless)!=0) {
+    ylabel=c(ylabel,yless[1]);
+    yless=yless[yless!=yless[1]]}}
+
+ylabel=c(ylabel,yless[1])
+prob=numeric()
+
+for(i in 1:h) prob=c(prob,length(ydis[ydis==ylabel[i]])/n)
+
+vxy = array(0,c(p,p,h))
+for(i in 1:h) vxy[,,i] = var(xst[ydis==ylabel[i],])
+
+savemat=0
+for(i in 1:h){
+savemat=savemat+prob[i]*(vxy[,,i]-diag(p))%*%(vxy[,,i]-diag(p))}
+
+return(signrt%*%eigen(savemat)$vectors[,1:r])}
+```
+
+
+```{r}
+h=2
+r=2
+ytype = 'continuous'
+
+beta = save(x,y,h,r,ytype)  
+savePre1 = x %*% beta[,1]
+savePre2 = x %*% beta[,2]
+plot(savePre1,y)
+plot(savePre2,y)
+
+
+cor(savePre1,y,method = 'spearman')
+cor(savePre2,y,method = 'spearman')
+```
+```{r}
+sirii=function(x,y,h,r,ytype="continuous"){
+p=ncol(x)
+n=nrow(x)
+signrt=matpower(var(x),-1/2)
+xc=t(t(x)-apply(x,2,mean))
+xst=t(t(x)-apply(x,2,mean))%*%signrt
+
+if(ytype=="continuous") ydis=discretize(y,h)
+if(ytype=="categorical") ydis=y
+
+yless=ydis
+ylabel=numeric()
+
+for(i in 1:n) {if(var(yless)!=0) {ylabel=c(ylabel,yless[1]);
+yless=yless[yless!=yless[1]]}}
+
+ylabel=c(ylabel,yless[1])
+prob=numeric();exy=numeric()
+
+for(i in 1:h) prob=c(prob,length(ydis[ydis==ylabel[i]])/n)
+
+for(i in 1:h) exy=rbind(exy,apply(xst[ydis==ylabel[i],],2,mean))
+
+sirmat=t(exy)%*%diag(prob)%*%exy
+vxy = array(0,c(p,p,h))
+for(i in 1:h) vxy[,,i] = var(xst[ydis==ylabel[i],])
+
+savemat=0
+for(i in 1:h){
+savemat=savemat+prob[i]*(vxy[,,i]-diag(p))%*%(vxy[,,i]-diag(p))}
+
+siriimat=savemat-sirmat%*%t(sirmat)
+return(signrt%*%eigen(siriimat)$vectors[,1:r])}
+```
+
+
+```{r}
+h=2
+r=2
+ytype = 'continuous'
+
+beta = sirii(x,y,h,r,ytype)  
+siriiPre1 = x %*% beta[,1]
+siriiPre2 = x %*% beta[,2]
+plot(siriiPre1,y)
+plot(siriiPre2,y)
+
+
+cor(siriiPre1,y,method = 'spearman')
+cor(siriiPre2,y,method = 'spearman')
+```
+
+Simulation
+```{r}
+X<-matrix(rnorm(2000),nrow=200)
+e<-matrix(rnorm(200,mean=0,sd=0.2),nrow=200)
+y<- X[,1]^2 + 2*sin(X[,2]) + e
+
+plot(X[,1],y)
+plot(X[,2],y)
+```
+```{r}
+h=8
+r=2
+ytype = 'continuous'
+
+sirBeta = sir(X,y,h,r,ytype)  
+sirPre1 = X %*% sirBeta[,1]
+sirPre2 = X %*% sirBeta[,2]
+plot(sirPre1,y)
+plot(sirPre2,y)
+
+saveBeta = save(X,y,h,r,ytype)  
+savePre1 = X %*% saveBeta[,1]
+savePre2 = X %*% saveBeta[,2]
+plot(savePre1,y)
+plot(savePre2,y)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

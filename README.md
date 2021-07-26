@@ -5,4 +5,4 @@ Inverse Regression with Python.ipynb: Python codes of sir, pir, kir, save, sir-I
 
 bigmacindex.xlsx: dataset in order according to the textbook (data in the sheet2)
 
-pendigit.xles: Pen Digits dataset
+pendigits.xlsx: Pen Digits dataset
